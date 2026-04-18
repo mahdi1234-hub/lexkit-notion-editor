@@ -30,11 +30,11 @@ export function EditorToolbar({ onOpenVoice, onOpenAI }: EditorToolbarProps) {
     <Draggable handle=".dock-handle" nodeRef={nodeRef} defaultClassName="">
       <div
         ref={nodeRef}
-        className="fixed bottom-6 left-1/2 z-40 -translate-x-1/2 select-none"
+        className="fixed right-6 top-1/2 z-40 -translate-y-1/2 select-none"
       >
         <div className="flex flex-col items-center gap-1">
-          <div className="dock-handle h-1 w-12 cursor-grab rounded-full bg-foreground/20 active:cursor-grabbing" />
-          <AnimatedDock items={items} />
+          <div className="dock-handle h-1 w-10 cursor-grab rounded-full bg-foreground/20 active:cursor-grabbing" />
+          <AnimatedDock items={items} orientation="vertical" />
         </div>
       </div>
     </Draggable>

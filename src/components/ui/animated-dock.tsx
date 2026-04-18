@@ -21,48 +21,68 @@ export interface DockItemData {
 export interface AnimatedDockProps {
   className?: string;
   items: DockItemData[];
+  orientation?: "horizontal" | "vertical";
 }
 
-export const AnimatedDock = ({ className, items }: AnimatedDockProps) => {
-  const mouseX = useMotionValue(Infinity);
+export const AnimatedDock = ({
+  className,
+  items,
+  orientation = "horizontal",
+}: AnimatedDockProps) => {
+  const mouseCoord = useMotionValue(Infinity);
+  const vertical = orientation === "vertical";
 
   return (
     <motion.div
-      onMouseMove={(e) => mouseX.set(e.pageX)}
-      onMouseLeave={() => mouseX.set(Infinity)}
+      onMouseMove={(e) =>
+        mouseCoord.set(vertical ? e.pageY : e.pageX)
+      }
+      onMouseLeave={() => mouseCoord.set(Infinity)}
       className={cn(
-        "mx-auto flex h-16 items-end gap-3 rounded-2xl border border-primary/10 bg-secondary/70 px-4 pb-3 shadow-lg backdrop-blur",
+        "rounded-2xl border border-primary/10 bg-secondary/70 shadow-lg backdrop-blur",
+        vertical
+          ? "mx-auto flex w-16 flex-col items-end gap-3 px-3 py-4"
+          : "mx-auto flex h-16 items-end gap-3 px-4 pb-3",
         className
       )}
     >
       {items.map((item, index) => (
-        <DockItem key={index} mouseX={mouseX} item={item} />
+        <DockItem
+          key={index}
+          mouseCoord={mouseCoord}
+          item={item}
+          vertical={vertical}
+        />
       ))}
     </motion.div>
   );
 };
 
 interface DockItemProps {
-  mouseX: MotionValue<number>;
+  mouseCoord: MotionValue<number>;
   item: DockItemData;
+  vertical: boolean;
 }
 
-const DockItem = ({ mouseX, item }: DockItemProps) => {
+const DockItem = ({ mouseCoord, item, vertical }: DockItemProps) => {
   const ref = useRef<HTMLButtonElement>(null);
 
-  const distance = useTransform(mouseX, (val) => {
-    const bounds = ref.current?.getBoundingClientRect() ?? { x: 0, width: 0 };
-    return val - bounds.x - bounds.width / 2;
+  const distance = useTransform(mouseCoord, (val) => {
+    const bounds = ref.current?.getBoundingClientRect();
+    if (!bounds) return 0;
+    return vertical
+      ? val - bounds.y - bounds.height / 2
+      : val - bounds.x - bounds.width / 2;
   });
 
-  const widthSync = useTransform(distance, [-150, 0, 150], [40, 72, 40]);
-  const width = useSpring(widthSync, {
+  const sizeSync = useTransform(distance, [-150, 0, 150], [40, 72, 40]);
+  const size = useSpring(sizeSync, {
     mass: 0.1,
     stiffness: 150,
     damping: 12,
   });
 
-  const iconScale = useTransform(width, [40, 72], [1, 1.4]);
+  const iconScale = useTransform(size, [40, 72], [1, 1.4]);
   const iconSpring = useSpring(iconScale, {
     mass: 0.1,
     stiffness: 150,
@@ -72,7 +92,7 @@ const DockItem = ({ mouseX, item }: DockItemProps) => {
   return (
     <motion.button
       ref={ref}
-      style={{ width }}
+      style={vertical ? { height: size } : { width: size }}
       onClick={item.onClick}
       title={item.label}
       aria-label={item.label}
