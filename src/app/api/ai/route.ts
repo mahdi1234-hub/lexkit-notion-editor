@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 
-export const runtime = "edge";
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 const CEREBRAS_URL = "https://api.cerebras.ai/v1/chat/completions";
 
@@ -48,6 +49,8 @@ export async function POST(req: NextRequest) {
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${apiKey}`,
+      "User-Agent": "lexkit-notion-editor/1.0",
+      Accept: "application/json",
     },
     body: JSON.stringify({
       model: "llama3.1-8b",
