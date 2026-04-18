@@ -128,3 +128,149 @@
     @apply font-sans;
   }
 }
+
+/* ---------------- LexKit editor styling ---------------- */
+
+.lexkit-container {
+  position: relative;
+}
+
+.lexkit-content {
+  min-height: 50vh;
+  outline: none;
+  font-size: 1rem;
+  line-height: 1.7;
+  color: var(--foreground);
+}
+
+.lexkit-placeholder {
+  position: absolute;
+  top: 0;
+  left: 0;
+  color: var(--muted-foreground);
+  pointer-events: none;
+  user-select: none;
+}
+
+.lexkit-content h1 {
+  font-size: 1.875rem;
+  font-weight: 700;
+  line-height: 1.2;
+  margin-top: 1.6rem;
+  margin-bottom: 0.6rem;
+  letter-spacing: -0.01em;
+}
+
+.lexkit-content h2 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  line-height: 1.25;
+  margin-top: 1.4rem;
+  margin-bottom: 0.5rem;
+}
+
+.lexkit-content h3 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  line-height: 1.3;
+  margin-top: 1.2rem;
+  margin-bottom: 0.4rem;
+}
+
+.lexkit-content h4,
+.lexkit-content h5,
+.lexkit-content h6 {
+  font-weight: 600;
+  margin-top: 1rem;
+  margin-bottom: 0.3rem;
+}
+
+.lexkit-content p {
+  margin: 0.3rem 0;
+}
+
+.lexkit-content blockquote {
+  border-left: 3px solid color-mix(in oklch, var(--foreground) 30%, transparent);
+  padding-left: 0.9rem;
+  color: color-mix(in oklch, var(--foreground) 75%, transparent);
+  margin: 0.6rem 0;
+}
+
+.lexkit-content ul,
+.lexkit-content ol {
+  padding-left: 1.5rem;
+  margin: 0.3rem 0;
+}
+
+.lexkit-content ul { list-style: disc; }
+.lexkit-content ol { list-style: decimal; }
+
+.lexkit-content li { margin: 0.15rem 0; }
+.lexkit-content li ul,
+.lexkit-content li ol { margin-top: 0.15rem; margin-bottom: 0.15rem; }
+
+.lexkit-content code {
+  background: color-mix(in oklch, var(--muted) 80%, transparent);
+  padding: 0.1rem 0.35rem;
+  border-radius: 0.3rem;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, monospace);
+  font-size: 0.9em;
+}
+
+.lexkit-content pre,
+.lexkit-content .editor-code {
+  background: color-mix(in oklch, var(--muted) 90%, transparent);
+  border-radius: 0.5rem;
+  padding: 0.85rem 1rem;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, monospace);
+  font-size: 0.875rem;
+  overflow-x: auto;
+  margin: 0.6rem 0;
+  position: relative;
+}
+
+.lexkit-content pre code {
+  background: transparent;
+  padding: 0;
+}
+
+.lexkit-content hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 1.2rem 0;
+}
+
+.lexkit-content a {
+  color: color-mix(in oklch, var(--primary) 70%, var(--foreground));
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.lexkit-content table {
+  border-collapse: collapse;
+  margin: 0.8rem 0;
+  width: 100%;
+  overflow: hidden;
+  border-radius: 0.5rem;
+  border: 1px solid var(--border);
+}
+
+.lexkit-content th,
+.lexkit-content td {
+  border: 1px solid var(--border);
+  padding: 0.5rem 0.7rem;
+  vertical-align: top;
+  min-width: 80px;
+}
+
+.lexkit-content th {
+  background: color-mix(in oklch, var(--muted) 60%, transparent);
+  font-weight: 600;
+  text-align: left;
+}
+
+.lexkit-content img {
+  max-width: 100%;
+  border-radius: 0.5rem;
+  margin: 0.5rem 0;
+}
