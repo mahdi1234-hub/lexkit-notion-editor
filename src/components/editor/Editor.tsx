@@ -2,7 +2,6 @@
 
 import * as React from "react";
 import { useState } from "react";
-import { RichText } from "@lexkit/editor";
 import { LexKitProvider, extensions } from "./extensions";
 import { EditorToolbar } from "./EditorToolbar";
 import { SlashMenu } from "./SlashMenu";
@@ -16,14 +15,7 @@ export function Editor() {
   return (
     <LexKitProvider extensions={extensions}>
       <div className="lexkit-wrapper relative w-full">
-        <RichText
-          placeholder="Start writing, or press '/' for commands..."
-          classNames={{
-            container: "lexkit-container",
-            contentEditable: "lexkit-content",
-            placeholder: "lexkit-placeholder",
-          }}
-        />
+        {/* richTextExtension renders <RichText /> automatically via its plugins */}
         <SlashMenu />
         <EditorToolbar
           onOpenVoice={() => setVoiceOpen(true)}
