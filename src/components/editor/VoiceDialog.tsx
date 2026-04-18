@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useEffect, useRef, useState } from "react";
-import { Mic, Square, Play, Trash2 } from "lucide-react";
+import { Mic, Square, Trash2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -13,81 +13,60 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { useLexKitEditor } from "./extensions";
-import { insertPlainText } from "./insertHelpers";
-
-type SpeechRecognitionCtor = new () => SpeechRecognitionInstance;
-
-interface SpeechRecognitionResult {
-  isFinal: boolean;
-  0: { transcript: string };
-}
-
-interface SpeechRecognitionResultList {
-  length: number;
-  [index: number]: SpeechRecognitionResult;
-}
-
-interface SpeechRecognitionEvent {
-  resultIndex: number;
-  results: SpeechRecognitionResultList;
-}
-
-interface SpeechRecognitionInstance {
-  continuous: boolean;
-  interimResults: boolean;
-  lang: string;
-  onresult: ((event: SpeechRecognitionEvent) => void) | null;
-  onerror: ((event: { error: string }) => void) | null;
-  onend: (() => void) | null;
-  start: () => void;
-  stop: () => void;
-}
-
-function getSpeechRecognition(): SpeechRecognitionCtor | null {
-  if (typeof window === "undefined") return null;
-  const w = window as unknown as {
-    SpeechRecognition?: SpeechRecognitionCtor;
-    webkitSpeechRecognition?: SpeechRecognitionCtor;
-  };
-  return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
-}
 
 export interface VoiceDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
+function formatDuration(seconds: number): string {
+  const m = Math.floor(seconds / 60)
+    .toString()
+    .padStart(2, "0");
+  const s = Math.floor(seconds % 60)
+    .toString()
+    .padStart(2, "0");
+  return `${m}:${s}`;
+}
+
+function blobToDataURL(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result as string);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
+}
+
 export function VoiceDialog({ open, onOpenChange }: VoiceDialogProps) {
-  const { editor } = useLexKitEditor();
+  const { commands } = useLexKitEditor();
   const [recording, setRecording] = useState(false);
-  const [finalText, setFinalText] = useState("");
-  const [interimText, setInterimText] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
+  const [elapsed, setElapsed] = useState(0);
 
-  const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+  const tickRef = useRef<number | null>(null);
 
   const stopAll = React.useCallback(() => {
-    try {
-      recognitionRef.current?.stop();
-    } catch {}
-    recognitionRef.current = null;
     try {
       mediaRecorderRef.current?.stop();
     } catch {}
     mediaRecorderRef.current = null;
     mediaStreamRef.current?.getTracks().forEach((t) => t.stop());
     mediaStreamRef.current = null;
+    if (tickRef.current) {
+      window.clearInterval(tickRef.current);
+      tickRef.current = null;
+    }
     setRecording(false);
   }, []);
 
   useEffect(() => {
     if (open) return;
-    // When dialog closes, tear down any active capture.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     stopAll();
   }, [open, stopAll]);
 
@@ -99,134 +78,148 @@ export function VoiceDialog({ open, onOpenChange }: VoiceDialogProps) {
 
   const startRecording = async () => {
     setError(null);
-    setFinalText("");
-    setInterimText("");
+    setElapsed(0);
     if (audioUrl) {
       URL.revokeObjectURL(audioUrl);
       setAudioUrl(null);
     }
+    setAudioBlob(null);
 
-    const SR = getSpeechRecognition();
-    if (!SR) {
-      setError("SpeechRecognition is not supported in this browser. Use Chrome or Edge.");
-      return;
-    }
-
+    let stream: MediaStream;
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      mediaStreamRef.current = stream;
-
-      const mr = new MediaRecorder(stream);
-      mediaRecorderRef.current = mr;
-      chunksRef.current = [];
-      mr.ondataavailable = (e) => {
-        if (e.data.size > 0) chunksRef.current.push(e.data);
-      };
-      mr.onstop = () => {
-        const blob = new Blob(chunksRef.current, { type: "audio/webm" });
-        const url = URL.createObjectURL(blob);
-        setAudioUrl(url);
-      };
-      mr.start();
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     } catch {
       setError(
-        "Microphone permission denied. Allow mic access to use voice transcription."
+        "Microphone permission denied. Allow mic access to record your voice."
       );
       return;
     }
+    mediaStreamRef.current = stream;
 
-    const rec = new SR();
-    recognitionRef.current = rec;
-    rec.continuous = true;
-    rec.interimResults = true;
-    rec.lang = navigator.language || "en-US";
+    const mimeCandidates = [
+      "audio/webm;codecs=opus",
+      "audio/webm",
+      "audio/ogg;codecs=opus",
+      "audio/mp4",
+    ];
+    const mimeType =
+      mimeCandidates.find(
+        (m) =>
+          typeof MediaRecorder !== "undefined" &&
+          MediaRecorder.isTypeSupported(m)
+      ) || undefined;
 
-    rec.onresult = (event) => {
-      let finalChunk = "";
-      let interimChunk = "";
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const res = event.results[i];
-        const text = res[0]?.transcript ?? "";
-        if (res.isFinal) finalChunk += text;
-        else interimChunk += text;
-      }
-      if (finalChunk) setFinalText((prev) => (prev + " " + finalChunk).trim());
-      setInterimText(interimChunk);
-    };
-    rec.onerror = (e) => {
-      setError(`Recognition error: ${e.error}`);
-    };
-    rec.onend = () => {
-      // auto-restart if still supposed to be recording
-      if (recordingRef.current) {
-        try {
-          rec.start();
-        } catch {}
-      }
-    };
-
-    recordingRef.current = true;
+    let mr: MediaRecorder;
     try {
-      rec.start();
+      mr = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
     } catch {
-      setError("Could not start speech recognition.");
+      setError("This browser cannot record audio (MediaRecorder unavailable).");
+      stream.getTracks().forEach((t) => t.stop());
       return;
     }
+    mediaRecorderRef.current = mr;
+    chunksRef.current = [];
+    mr.ondataavailable = (e) => {
+      if (e.data.size > 0) chunksRef.current.push(e.data);
+    };
+    mr.onstop = () => {
+      const blob = new Blob(chunksRef.current, {
+        type: mr.mimeType || "audio/webm",
+      });
+      const url = URL.createObjectURL(blob);
+      setAudioBlob(blob);
+      setAudioUrl(url);
+    };
+    mr.start(250);
+
+    const startedAt = performance.now();
+    tickRef.current = window.setInterval(() => {
+      setElapsed((performance.now() - startedAt) / 1000);
+    }, 200);
+
     setRecording(true);
   };
 
-  const recordingRef = useRef(false);
-
   const stopRecording = () => {
-    recordingRef.current = false;
     stopAll();
-  };
-
-  const insertIntoEditor = () => {
-    const combined = [finalText, interimText].filter(Boolean).join(" ").trim();
-    if (!combined || !editor) return;
-    insertPlainText(editor, combined + " ");
-    onOpenChange(false);
   };
 
   const reset = () => {
     stopAll();
-    recordingRef.current = false;
-    setFinalText("");
-    setInterimText("");
+    setElapsed(0);
     setError(null);
+    setAudioBlob(null);
     if (audioUrl) {
       URL.revokeObjectURL(audioUrl);
       setAudioUrl(null);
     }
   };
+
+  const insertIntoEditor = async () => {
+    if (!audioBlob) return;
+    try {
+      const dataUrl = await blobToDataURL(audioBlob);
+      const mime = audioBlob.type || "audio/webm";
+      const html = `<audio controls preload="metadata" src="${dataUrl}" data-type="${mime}"></audio>`;
+      commands.insertHTMLEmbed(html);
+      onOpenChange(false);
+    } catch {
+      setError("Could not insert the recording.");
+    }
+  };
+
+  const sizeKb = audioBlob ? Math.round(audioBlob.size / 1024) : 0;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Mic className="h-5 w-5" /> Voice transcription
+            <Mic className="h-5 w-5" /> Voice recorder
           </DialogTitle>
           <DialogDescription>
-            Dictate content; it will be transcribed live and injected into the editor.
+            Record your voice, listen back, then insert an audio player into
+            the document.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-3">
-          <div className="flex gap-2">
+          <div className="flex items-center gap-2">
             {!recording ? (
               <Button onClick={startRecording} className="gap-2">
                 <Mic className="h-4 w-4" /> Start recording
               </Button>
             ) : (
-              <Button onClick={stopRecording} variant="destructive" className="gap-2">
+              <Button
+                onClick={stopRecording}
+                variant="destructive"
+                className="gap-2"
+              >
                 <Square className="h-4 w-4" /> Stop
               </Button>
             )}
-            <Button variant="ghost" onClick={reset} className="gap-2">
+            <Button
+              variant="ghost"
+              onClick={reset}
+              disabled={recording}
+              className="gap-2"
+            >
               <Trash2 className="h-4 w-4" /> Reset
             </Button>
+            <div className="ml-auto font-mono text-sm tabular-nums text-muted-foreground">
+              {recording ? (
+                <span className="inline-flex items-center gap-2">
+                  <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-red-500" />
+                  {formatDuration(elapsed)}
+                </span>
+              ) : audioBlob ? (
+                <span>
+                  {formatDuration(elapsed)} · {sizeKb} KB
+                </span>
+              ) : (
+                <span>00:00</span>
+              )}
+            </div>
           </div>
 
           {error && (
@@ -235,30 +228,33 @@ export function VoiceDialog({ open, onOpenChange }: VoiceDialogProps) {
             </div>
           )}
 
-          <div className="min-h-[96px] rounded-md border border-border bg-muted/30 p-3 text-sm">
-            <span>{finalText}</span>{" "}
-            <span className="text-muted-foreground">{interimText}</span>
-            {!finalText && !interimText && (
-              <span className="text-muted-foreground">
-                Transcription will appear here...
-              </span>
+          <div className="rounded-md border border-border bg-muted/30 p-3">
+            {audioUrl ? (
+              <audio
+                controls
+                src={audioUrl}
+                className="w-full"
+                preload="metadata"
+              />
+            ) : (
+              <div className="text-sm text-muted-foreground">
+                {recording
+                  ? "Recording… speak now."
+                  : "Your recording will appear here."}
+              </div>
             )}
           </div>
-
-          {audioUrl && (
-            <div className="flex items-center gap-2">
-              <Play className="h-4 w-4 text-muted-foreground" />
-              <audio controls src={audioUrl} className="w-full" />
-            </div>
-          )}
         </div>
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button onClick={insertIntoEditor} disabled={!finalText && !interimText}>
-            Insert into editor
+          <Button
+            onClick={insertIntoEditor}
+            disabled={!audioBlob || recording}
+          >
+            Insert audio into editor
           </Button>
         </DialogFooter>
       </DialogContent>

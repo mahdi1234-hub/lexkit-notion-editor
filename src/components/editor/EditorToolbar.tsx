@@ -16,7 +16,7 @@ export function EditorToolbar({ onOpenVoice, onOpenAI }: EditorToolbarProps) {
   const items = [
     {
       Icon: <Mic size={22} />,
-      label: "Voice transcription",
+      label: "Voice recorder",
       onClick: onOpenVoice,
     },
     {
